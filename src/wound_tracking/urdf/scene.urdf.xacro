@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="$(arg name)">
+
+  <!-- ── args that ur_sim_control.launch.py passes ─────────────────────── -->
+  <xacro:arg name="name"                  default="ur"/>
+  <xacro:arg name="ur_type"               default="ur16e"/>
+  <xacro:arg name="tf_prefix"             default=""/>
+  <xacro:arg name="safety_limits"         default="false"/>
+  <xacro:arg name="safety_pos_margin"     default="0.15"/>
+  <xacro:arg name="safety_k_position"     default="20"/>
+  <xacro:arg name="simulation_controllers" default=""/>
+  <xacro:arg name="ros_namespace"         default=""/>
+  <xacro:arg name="transmission_hw_interface" default=""/>
+
+  <!-- ── config file paths derived from ur_type ───────────────────────── -->
+  <xacro:arg name="joint_limit_params"
+    default="$(find ur_description)/config/$(arg ur_type)/joint_limits.yaml"/>
+  <xacro:arg name="kinematics_params"
+    default="$(find ur_description)/config/$(arg ur_type)/default_kinematics.yaml"/>
+  <xacro:arg name="physical_params"
+    default="$(find ur_description)/config/$(arg ur_type)/physical_parameters.yaml"/>
+  <xacro:arg name="visual_params"
+    default="$(find ur_description)/config/$(arg ur_type)/visual_parameters.yaml"/>
+
+  <!-- ── includes ──────────────────────────────────────────────────────── -->
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="$(find ur_simulation_gz)/urdf/ur_gz.ros2_control.xacro"/>
+  <xacro:include filename="$(find wound_tracking)/urdf/camera.urdf.xacro"/>
+
+  <!-- ── world link ────────────────────────────────────────────────────── -->
+  <link name="world"/>
+
+  <!-- ── UR16e robot ───────────────────────────────────────────────────── -->
+  <!-- Robot base at z=0.75 (table top height from tracking_scene.sdf) -->
+  <xacro:ur_robot
+    name="$(arg name)"
+    tf_prefix="$(arg tf_prefix)"
+    parent="world"
+    joint_limits_parameters_file="$(arg joint_limit_params)"
+    kinematics_parameters_file="$(arg kinematics_params)"
+    physical_parameters_file="$(arg physical_params)"
+    visual_parameters_file="$(arg visual_params)"
+    safety_limits="$(arg safety_limits)"
+    safety_pos_margin="$(arg safety_pos_margin)"
+    safety_k_position="$(arg safety_k_position)"
+    force_abs_paths="true"
+  >
+    <origin xyz="0 0 0.75" rpy="0 0 0"/>
+  </xacro:ur_robot>
+
+  <!-- ── Camera attached to tool0 ──────────────────────────────────────── -->
+  <xacro:wound_camera
+    parent="$(arg tf_prefix)tool0"
+    prefix="$(arg tf_prefix)"
+  />
+
+  <!-- ── Gz ros2_control plugin (required for joint control in Gazebo) ─── -->
+  <gazebo reference="world"/>
+  <gazebo>
+    <plugin filename="gz_ros2_control-system"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(arg simulation_controllers)</parameters>
+      <ros>
+        <namespace>$(arg ros_namespace)</namespace>
+      </ros>
+    </plugin>
+  </gazebo>
+
+  <!-- ── ros2_control hardware interface (Gz) ──────────────────────────── -->
+  <xacro:ur_ros2_control
+    name="$(arg name)"
+    tf_prefix="$(arg tf_prefix)"
+    transmission_hw_interface="$(arg transmission_hw_interface)"
+    initial_positions="${dict(
+      shoulder_pan_joint=-0.261799,
+      shoulder_lift_joint=-1.483530,
+      elbow_joint=1.483530,
+      wrist_1_joint=-1.570796,
+      wrist_2_joint=-1.745329,
+      wrist_3_joint=-3.403392)}"
+  />
+
+</robot>

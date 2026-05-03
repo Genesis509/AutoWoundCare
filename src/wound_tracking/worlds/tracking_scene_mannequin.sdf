@@ -1,0 +1,437 @@
+<?xml version="1.0"?>
+<!--
+  tracking_scene_mannequin.sdf
+  ════════════════════════════════════════════════════════════════════════════
+  Gz Harmonic world — wound_tracking simulation with humanoid mannequin.
+
+  Scene contents
+  ──────────────
+    - Table        : 1.2 × 0.8 × 0.75 m static box, top surface at z = 0.75 m
+    - Mannequin    : adult human, lying on back, head toward +X (away from robot)
+    - Wound patch  : red marker on upper chest, detectable by existing pipeline
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  HOW TO REPOSITION THE WHOLE BODY                                       │
+  │  Change the single <pose> tag on the mannequin model (search "BODY      │
+  │  POSITION").  Format: x y z roll pitch yaw                              │
+  │  Current: 0.48  0.0  0.75  0 0 0                                        │
+  │    x = 0.48  → torso center 48 cm from robot base along table           │
+  │    y = 0.0   → centred on table                                         │
+  │    z = 0.75  → lying on table top (do not change z)                     │
+  │    rpy = 0 0 0 → on back, head in +X direction                          │
+  │  To rotate: change yaw (last value), e.g. "0 0 1.5708" = 90° turn       │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  HOW TO REPOSITION THE WOUND PATCH                                      │
+  │  Change the single <pose> tag on the wound_patch model (search "WOUND   │
+  │  POSITION").  Format: x y z roll pitch yaw                              │
+  │  Current: 0.53  0.0  0.895  0 0 0                                       │
+  │    x = 0.53  → upper chest (torso runs world x 0.28–0.68)               │
+  │    y = 0.0   → body centreline; offset e.g. 0.08 for left/right         │
+  │    z = 0.895 → torso top surface (table 0.75 + torso 0.14 + patch 0.005)│
+  │  Body surface Z reference:                                               │
+  │    Torso top  : z = 0.890  (place wound here, offset +0.005 for centre) │
+  │    Head top   : z = 0.930                                               │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  Coordinate frame (world)
+  ─────────────────────────
+         +X (robot reach direction)
+         ↑
+    HEAD ●──────[TORSO]──────[PELVIS]──[LEGS]──  → -X (feet, may overhang)
+         robot base at (0,0,0.75)
+         table top at z = 0.75
+
+  Robot note
+  ──────────
+  The UR16e is NOT in this file — spawned from scene.urdf.xacro by
+  ur_sim_control.launch.py with base_link at z = 0.75 m.
+
+  Pipeline note
+  ─────────────
+  Wound patch sits at z = 0.895 (vs old red_target at z = 0.755).
+  Camera pose estimator detects live position → robot approach auto-adapts.
+  Approach height (15 cm above wound): z ≈ 1.045 world = 0.295 m base_link.
+-->
+<sdf version="1.10">
+  <world name="wound_tracking_mannequin_world">
+
+    <!-- ── Simulation plugins ─────────────────────────────────────────────── -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- ── Lighting ───────────────────────────────────────────────────────── -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ── Ground plane ───────────────────────────────────────────────────── -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>20 20</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>20 20</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Table ──────────────────────────────────────────────────────────── -->
+    <!--
+      1.2 × 0.8 × 0.75 m.  Centre at z = 0.375 → top surface at z = 0.75.
+      Extends X: [−0.3, 0.9]  Y: [−0.4, 0.4]
+    -->
+    <model name="table">
+      <static>true</static>
+      <pose>0.3 0 0.375 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>1.2 0.8 0.75</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.2 0.8 0.75</size></box></geometry>
+          <material>
+            <ambient>0.55 0.35 0.15 1</ambient>
+            <diffuse>0.55 0.35 0.15 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         HUMANOID MANNEQUIN
+         ══════════════════════════════════════════════════════════════════════
+         Single static model — all body parts as links.
+         Moving the model <pose> below repositions the entire body.
+
+         Model-frame convention
+         ───────────────────────
+           Origin  = torso centre at table surface level
+           +X axis = toward head  (head in +X, feet in −X)
+           +Y axis = patient's right side
+           +Z axis = up (away from table)
+
+         Cylinders: SDF default axis = Z.
+           rpy="0 1.5708 0" rotates Z→X so the cylinder lies along X.
+
+         All link <pose> values are relative to the model origin below.
+         ────────────────────────────────────────────────────────────────── -->
+
+    <!-- ▼▼▼  BODY POSITION — change this one line to move the whole mannequin  ▼▼▼ -->
+    <model name="mannequin">
+      <static>true</static>
+      <pose>0.43 0.25 0.75 0 0 0</pose>
+    <!-- ▲▲▲  END BODY POSITION  ▲▲▲ -->
+
+      <!-- Skin material reused across all body-part visuals -->
+      <!-- ambient/diffuse: warm beige skin tone (0.85, 0.65, 0.50) -->
+
+      <!-- ── Torso (chest + abdomen) ──────────────────────────────────────
+           Box 0.40 × 0.24 × 0.14 m
+           Main wound target surface — top face at model-z = 0.14
+           World extent X: [0.28, 0.68]  Y: [−0.12, 0.12]  Z: [0.75, 0.89]
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="torso">
+        <pose>0 0 0.07 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>0.40 0.24 0.14</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.40 0.24 0.14</size></box></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Head ─────────────────────────────────────────────────────────
+           Sphere r = 0.09 m
+           Centre at model-x = 0.31  (world x ≈ 0.79)
+           Back of head rests on table: centre z = 0.09 (= r)
+           Head tip world x ≈ 0.88 m — just inside table end (0.90 m)
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="head">
+        <pose>0.31 0 0.09 0 0 0</pose>
+        <collision name="collision">
+          <geometry><sphere><radius>0.09</radius></sphere></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><sphere><radius>0.09</radius></sphere></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Neck ──────────────────────────────────────────────────────────
+           Cylinder r = 0.038 m, h = 0.07 m, lying along X
+           Bridges torso (ends x=0.20) to head (starts x=0.22)
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="neck">
+        <pose>0.215 0 0.09 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.038</radius><length>0.07</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.038</radius><length>0.07</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Left upper arm ────────────────────────────────────────────────
+           Cylinder r = 0.042 m, h = 0.25 m, lying along X
+           Alongside torso at y = −0.165 (torso half-Y 0.12 + gap + arm r)
+           Resting on table: centre z = 0.042
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="left_upper_arm">
+        <pose>0.04 -0.165 0.042 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.042</radius><length>0.25</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.042</radius><length>0.25</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Right upper arm ───────────────────────────────────────────────
+           Mirror of left upper arm at y = +0.165
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="right_upper_arm">
+        <pose>0.04 0.165 0.042 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.042</radius><length>0.25</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.042</radius><length>0.25</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Left forearm ──────────────────────────────────────────────────
+           Cylinder r = 0.034 m, h = 0.22 m, lying along X
+           Continues from upper arm end (model x = −0.085)
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="left_forearm">
+        <pose>-0.195 -0.165 0.034 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.034</radius><length>0.22</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.034</radius><length>0.22</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Right forearm ─────────────────────────────────────────────────
+           Mirror of left forearm at y = +0.165
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="right_forearm">
+        <pose>-0.195 0.165 0.034 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.034</radius><length>0.22</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.034</radius><length>0.22</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Pelvis / hips ─────────────────────────────────────────────────
+           Box 0.22 × 0.24 × 0.12 m
+           Connects torso (ends x = −0.20) to thighs
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="pelvis">
+        <pose>-0.31 0 0.06 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>0.22 0.24 0.12</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.22 0.24 0.12</size></box></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Left thigh ────────────────────────────────────────────────────
+           Cylinder r = 0.058 m, h = 0.26 m, lying along X
+           Legs slightly apart: y = −0.09
+           Connects to pelvis (ends x = −0.42)
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="left_thigh">
+        <pose>-0.55 -0.09 0.058 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.058</radius><length>0.26</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.058</radius><length>0.26</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Right thigh ───────────────────────────────────────────────────
+           Mirror of left thigh at y = +0.09
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="right_thigh">
+        <pose>-0.55 0.09 0.058 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.058</radius><length>0.26</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.058</radius><length>0.26</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Left shin ─────────────────────────────────────────────────────
+           Cylinder r = 0.042 m, h = 0.24 m, lying along X
+           Continues from thigh end (model x = −0.68)
+           Note: shins extend ~0.14 m past table edge — intentional
+                 (natural patient position, legs over edge)
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="left_shin">
+        <pose>-0.80 -0.09 0.042 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.042</radius><length>0.24</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.042</radius><length>0.24</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+      <!-- ── Right shin ────────────────────────────────────────────────────
+           Mirror of left shin at y = +0.09
+      ────────────────────────────────────────────────────────────────── -->
+      <link name="right_shin">
+        <pose>-0.80 0.09 0.042 0 1.5708 0</pose>
+        <collision name="collision">
+          <geometry><cylinder><radius>0.042</radius><length>0.24</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.042</radius><length>0.24</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.65 0.50 1</ambient>
+            <diffuse>0.85 0.65 0.50 1</diffuse>
+            <specular>0.05 0.03 0.02 1</specular>
+          </material>
+        </visual>
+      </link>
+
+    </model>
+    <!-- ════════════════════════════════════════════════════════════════════
+         END MANNEQUIN
+         ════════════════════════════════════════════════════════════════════ -->
+
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         WOUND PATCH
+         ══════════════════════════════════════════════════════════════════════
+         Separate model so wound position is independently adjustable.
+         Same red colour as the original red_target — existing detection
+         pipeline requires no changes.
+
+         World extent of torso surface (for wound placement reference):
+           X: 0.28 → 0.68  (torso width in reach direction)
+           Y: −0.12 → 0.12 (torso width left/right)
+           Z: 0.890         (torso top surface)
+
+         Wound patch bottom face must sit ON torso top (z = 0.890).
+         Patch height = 0.01 m → centre z = 0.890 + 0.005 = 0.895
+         ────────────────────────────────────────────────────────────────── -->
+
+    <!-- ▼▼▼  WOUND POSITION — change this one line to reposition the wound  ▼▼▼ -->
+    <model name="wound_patch">
+      <static>true</static>
+      <pose>0.53 0.0 0.895 0 0 0</pose>
+    <!-- ▲▲▲  END WOUND POSITION  ▲▲▲ -->
+
+      <!--
+        Patch dimensions: 6 cm × 4 cm × 1 cm (oval-ish wound footprint)
+        In base_link frame (robot z = 0.75):
+          wound centre ≈ (0.53, 0.0, 0.145)
+          approach target (15 cm above): ≈ (0.53, 0.0, 0.295) base_link
+      -->
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.06 0.04 0.01</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.06 0.04 0.01</size></box></geometry>
+          <material>
+            <ambient>1.0 0.0 0.0 1</ambient>
+            <diffuse>1.0 0.0 0.0 1</diffuse>
+            <specular>0.1 0.0 0.0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <!-- ════════════════════════════════════════════════════════════════════
+         END WOUND PATCH
+         ════════════════════════════════════════════════════════════════════ -->
+
+  </world>
+</sdf>

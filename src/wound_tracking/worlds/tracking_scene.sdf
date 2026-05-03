@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<!--
+  Gz Harmonic world for wound_tracking simulation.
+
+  Contents:
+    - Table: 1.2 x 0.8 x 0.75 m static box, top surface at z = 0.75 m
+    - Red cube: 5 x 5 x 1 cm, sitting on the table at (0.45, 0.0, 0.755)
+
+  The UR16e robot is NOT in this file — it is spawned from the URDF by
+  ur_sim_control.launch.py.  The robot base is placed at z = 0.75 m in
+  scene.urdf.xacro so it stands on the table top.
+
+  Robot reachable point to red cube surface: (0.45, 0.0, 0.75) in world frame
+  → (0.45, 0.0, 0.0) in base_link frame — well within UR16e workspace.
+  Target pose (15 cm above cube): (0.45, 0.0, 0.905) world = (0.45, 0.0, 0.155) base_link.
+-->
+<sdf version="1.10">
+  <world name="wound_tracking_world">
+
+    <!-- ── Simulation plugins ────────────────────────────────────────────── -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+
+    <!-- Sensors system: required for the RGBD camera to render -->
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- ── Lighting ──────────────────────────────────────────────────────── -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ── Ground plane ──────────────────────────────────────────────────── -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>20 20</size></plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane><normal>0 0 1</normal><size>20 20</size></plane>
+          </geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Table ─────────────────────────────────────────────────────────── -->
+    <!--
+      Box size 1.2 x 0.8 x 0.75 m.
+      Model pose sets the CENTER of the box, so z = 0.375 puts the top at z = 0.75.
+      Positioned so the robot (at x=0, y=0) sits near one end, with 90 cm of
+      reachable table surface extending forward.
+    -->
+    <model name="table">
+      <static>true</static>
+      <pose>0.3 0 0.375 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>1.2 0.8 0.75</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>1.2 0.8 0.75</size></box></geometry>
+          <material>
+            <ambient>0.55 0.35 0.15 1</ambient>
+            <diffuse>0.55 0.35 0.15 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Red target cube ────────────────────────────────────────────────── -->
+    <!--
+      Thin box: 5 cm x 5 cm x 1 cm (simulating a flat marker / target).
+      Placed 45 cm in front of the robot base, centred on Y.
+      Bottom of cube at z = 0.75 (table top), centre at z = 0.755.
+
+      In base_link frame (robot base at world z=0.75):
+        position ≈ (0.45, 0.0, 0.005)  →  target approach: (0.45, 0.0, 0.155)
+    -->
+    <model name="red_target">
+      <static>true</static>
+      <pose>0.45 0.0 0.755 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.05 0.05 0.01</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.05 0.05 0.01</size></box></geometry>
+          <material>
+            <ambient>1.0 0.0 0.0 1</ambient>
+            <diffuse>1.0 0.0 0.0 1</diffuse>
+            <specular>0.1 0.0 0.0 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
